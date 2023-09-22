@@ -1,0 +1,6 @@
+version : "3.3"
+services :
+  web :
+     image : ssah6694/ekartimage:latest
+     ports :
+         - "8070:8070"
