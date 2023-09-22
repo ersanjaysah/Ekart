@@ -1,0 +1,67 @@
+pipeline {
+    agent any
+    
+    environment{
+        SCANNER_HOME= tool 'sonar-scanner'
+    }
+    
+    stages {
+        stage('git clone') {
+            steps {
+                git branch: 'main', changelog: false, poll: false, url: 'https://github.com/ersanjaysah/Ekart.git'
+            }
+        }
+        
+        stage('COMPILE') {
+            steps {
+                sh "mvn clean compile -DskipTests=true"
+            }
+        }
+        
+        stage('Sonarqube') {
+            steps {
+                sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.url=http://65.1.106.77:9000/ -Dsonar.login=squ_5cfa93e6de01bffe93630962a30e894ed236efb1 -Dsonar.projectName=Ekart \
+                   -Dsonar.java.binaries=. \
+                   -Dsonar.projectKey=Ekart '''
+               
+            }
+        }
+        
+        stage('OWASP Scan') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ ', odcInstallation: 'dp-check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        
+        stage('mvn install') {
+            steps {
+                sh "mvn clean package -DskipTests=true"
+            }
+        }
+        
+         stage("docker images"){
+            steps{
+                sh "docker build -t ekartimage ."
+            }
+        }
+        
+        stage("push to docker hub"){
+            steps{
+                echo "pushing the image to docker hub"
+                withCredentials([usernamePassword(credentialsId:"dockerhub", passwordVariable:"dockerHubPass", usernameVariable:"dockerHubUser")]){
+                    sh "docker tag ekartimage ${env.dockerHubUser}/ekartimage:latest"
+                    sh "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPass}"
+                    sh "docker push ${env.dockerHubUser}/ekartimage:latest"
+                }
+            }
+        }
+        
+        stage("deployed in docker-compose"){
+            steps{
+                echo "deployed the image into a container with docker-compose"
+                sh "docker-compose down && docker-compose up -d"
+            }
+        }
+    }
+}
